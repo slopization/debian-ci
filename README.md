@@ -23,7 +23,6 @@ name: build
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -50,6 +49,7 @@ permissions:
 
 jobs:
   publish:
+    if: github.ref == 'refs/heads/main'
     uses: slopization/debian-ci/.github/workflows/package.yml@v1
     with:
       mode: native
