@@ -1,0 +1,222 @@
+name: Debian package
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: "native for a native source package, gbp for a recipe-only 3.0 (quilt) package"
+        required: false
+        type: string
+        default: native
+      validate:
+        description: "Package validation profile: none, dkms, or firmware"
+        required: false
+        type: string
+        default: none
+      firmware-path:
+        description: "Absolute path of the firmware inside the package (firmware profile)"
+        required: false
+        type: string
+        default: ""
+      firmware-sha256:
+        description: "Expected SHA-256 of the firmware file (firmware profile)"
+        required: false
+        type: string
+        default: ""
+      forbid-filename:
+        description: "Optional basename that must not appear in the package payload"
+        required: false
+        type: string
+        default: ""
+      publish:
+        description: "Sign and publish the built packages with deb-s3"
+        required: false
+        type: boolean
+        default: false
+      suite:
+        description: "Debian suite used for the sbuild chroot"
+        required: false
+        type: string
+        default: trixie
+      mirror:
+        description: "Debian mirror used by mmdebstrap"
+        required: false
+        type: string
+        default: http://deb.debian.org/debian
+      artifact-name:
+        description: "Workflow artifact name; defaults to <repository>-<sha>"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      DEB_REPO_SIGNING_PRIVATE_KEY:
+        required: false
+      DEB_REPO_SIGNING_PASSPHRASE:
+        required: false
+      AWS_ACCESS_KEY_ID:
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+      AWS_SESSION_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      SBUILD_MIRROR: ${{ inputs.mirror }}
+      SBUILD_SUITE: ${{ inputs.suite }}
+      DEB_S3_BUCKET: ${{ vars.DEB_S3_BUCKET }}
+      DEB_S3_PREFIX: ${{ vars.DEB_S3_PREFIX }}
+      DEB_S3_CODENAME: ${{ vars.DEB_S3_CODENAME }}
+      DEB_S3_COMPONENT: ${{ vars.DEB_S3_COMPONENT }}
+      DEB_S3_REGION: ${{ vars.DEB_S3_REGION }}
+      DEB_S3_ENDPOINT: ${{ vars.DEB_S3_ENDPOINT }}
+      DEB_S3_FORCE_PATH_STYLE: ${{ vars.DEB_S3_FORCE_PATH_STYLE }}
+      DEB_S3_SIGN_KEY: ${{ vars.DEB_S3_SIGN_KEY }}
+      DEB_S3_CLEAN: ${{ vars.DEB_S3_CLEAN }}
+      DEB_S3_ORIGIN: ${{ vars.DEB_S3_ORIGIN }}
+      DEB_S3_SUITE: ${{ vars.DEB_S3_SUITE }}
+      DEB_S3_PRESERVE_VERSIONS: ${{ vars.DEB_S3_PRESERVE_VERSIONS }}
+      DEB_S3_LOCK: ${{ vars.DEB_S3_LOCK }}
+      DEB_S3_FAIL_IF_EXISTS: ${{ vars.DEB_S3_FAIL_IF_EXISTS }}
+      DEB_S3_VISIBILITY: ${{ vars.DEB_S3_VISIBILITY }}
+      DEB_REPO_SIGNING_PRIVATE_KEY: ${{ secrets.DEB_REPO_SIGNING_PRIVATE_KEY }}
+      DEB_REPO_SIGNING_PASSPHRASE: ${{ secrets.DEB_REPO_SIGNING_PASSPHRASE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+    steps:
+      - name: Validate workflow inputs
+        env:
+          CI_MODE: ${{ inputs.mode }}
+          CI_VALIDATE: ${{ inputs.validate }}
+          CI_PUBLISH: ${{ inputs.publish }}
+          CI_FIRMWARE_PATH: ${{ inputs.firmware-path }}
+          CI_FIRMWARE_SHA256: ${{ inputs.firmware-sha256 }}
+        run: |
+          case "$CI_MODE" in
+            native | gbp) ;;
+            *)
+              echo "::error::mode must be native or gbp, got '$CI_MODE'"
+              exit 1
+              ;;
+          esac
+          case "$CI_VALIDATE" in
+            none | dkms | firmware) ;;
+            *)
+              echo "::error::validate must be none, dkms, or firmware, got '$CI_VALIDATE'"
+              exit 1
+              ;;
+          esac
+          if [[ "$CI_VALIDATE" == "firmware" ]]; then
+            [[ -n "$CI_FIRMWARE_PATH" ]] || { echo "::error::firmware-path is required"; exit 1; }
+            [[ "$CI_FIRMWARE_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::firmware-sha256 must be a lowercase SHA-256"; exit 1; }
+          fi
+          if [[ "$CI_PUBLISH" == "true" ]]; then
+            [[ -n "$DEB_S3_BUCKET" ]] || { echo "::error::publish=true requires the DEB_S3_BUCKET repository variable"; exit 1; }
+            [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" ]] || { echo "::error::publish=true requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets"; exit 1; }
+          fi
+
+      - name: Check out package repository
+        uses: actions/checkout@v4
+        with:
+          path: pkg
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out shared CI
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+
+      - name: Install build tooling
+        env:
+          CI_MODE: ${{ inputs.mode }}
+          CI_PUBLISH: ${{ inputs.publish }}
+        run: .ci/scripts/install-build-deps.sh
+
+      - name: Enable user namespaces
+        run: .ci/scripts/enable-userns.sh
+
+      - name: Prepare recipe build tree
+        id: prepare
+        if: inputs.mode == 'gbp'
+        working-directory: pkg
+        run: |
+          ../.ci/scripts/prepare-gbp-tree.sh \
+            --workspace "${RUNNER_TEMP}/build" \
+            --download-dir "${RUNNER_TEMP}" \
+            --output-file "${GITHUB_OUTPUT}"
+
+      - name: Build source package
+        id: source
+        env:
+          BUILD_WORKSPACE: ${{ steps.prepare.outputs.workspace || format('{0}/pkg', github.workspace) }}
+        run: |
+          .ci/scripts/build-source-package.sh \
+            --workspace "$BUILD_WORKSPACE" \
+            --output-file "$GITHUB_OUTPUT"
+
+      - name: Build binary packages with sbuild
+        id: sbuild
+        env:
+          BUILD_WORKSPACE: ${{ steps.prepare.outputs.workspace || format('{0}/pkg', github.workspace) }}
+          SOURCE_DSC: ${{ steps.source.outputs.dsc }}
+        run: |
+          .ci/scripts/run-sbuild.sh \
+            --workspace "$BUILD_WORKSPACE" \
+            --dsc "$SOURCE_DSC" \
+            --build-dir "${RUNNER_TEMP}/sbuild-out" \
+            --artifact-dir "${RUNNER_TEMP}/artifacts" \
+            --output-file "$GITHUB_OUTPUT"
+
+      - name: Validate package
+        if: inputs.validate != 'none'
+        env:
+          CI_VALIDATE: ${{ inputs.validate }}
+          CI_FIRMWARE_PATH: ${{ inputs.firmware-path }}
+          CI_FIRMWARE_SHA256: ${{ inputs.firmware-sha256 }}
+          CI_FORBID_FILENAME: ${{ inputs.forbid-filename }}
+          ARTIFACT_DIR: ${{ steps.sbuild.outputs.artifact_dir }}
+        run: |
+          .ci/scripts/validate-package.sh \
+            --kind "$CI_VALIDATE" \
+            --artifact-dir "$ARTIFACT_DIR" \
+            --firmware-path "$CI_FIRMWARE_PATH" \
+            --firmware-sha256 "$CI_FIRMWARE_SHA256" \
+            --forbid-filename "$CI_FORBID_FILENAME"
+
+      - name: Prepare repository signing key
+        if: inputs.publish && env.DEB_REPO_SIGNING_PRIVATE_KEY != ''
+        env:
+          ARTIFACT_DIR: ${{ steps.sbuild.outputs.artifact_dir }}
+        run: |
+          .ci/scripts/setup-repo-signing.sh \
+            --env-file "$GITHUB_ENV" \
+            --home "${RUNNER_TEMP}/deb-repo-signing" \
+            --public-key-dir "${ARTIFACT_DIR}/repository-signing-key"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name || format('{0}-{1}', github.event.repository.name, github.sha) }}
+          path: ${{ steps.sbuild.outputs.artifact_dir }}/
+          if-no-files-found: error
+
+      - name: Publish to deb-s3
+        if: inputs.publish
+        env:
+          ARTIFACT_DIR: ${{ steps.sbuild.outputs.artifact_dir }}
+        run: |
+          .ci/scripts/publish-deb-s3.sh \
+            --artifact-dir "$ARTIFACT_DIR"
