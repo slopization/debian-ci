@@ -56,6 +56,8 @@ jobs:
       validate: dkms
       publish: true
     secrets:
+      DEB_CREDENTIALS: ${{ secrets.DEB_CREDENTIALS }}
+      # Optional per-field fallbacks:
       DEB_REPO_SIGNING_PRIVATE_KEY: ${{ secrets.DEB_REPO_SIGNING_PRIVATE_KEY }}
       DEB_REPO_SIGNING_PASSPHRASE: ${{ secrets.DEB_REPO_SIGNING_PASSPHRASE }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -94,11 +96,41 @@ repository.
 | `mirror` | `http://deb.debian.org/debian` | Debian mirror |
 | `artifact-name` | `<repo>-<sha>` | Uploaded artifact name |
 
-Publishing reads the caller repository's variables (`vars.DEB_S3_*`) and the
-secrets passed by the caller (`AWS_*`, `DEB_REPO_SIGNING_*`). Variables are
-resolved against the caller repository, so each package repository keeps its
-own publish configuration. Organization-level variables are inherited too, if
-you later move the repositories into an organization.
+Publishing reads `DEB_CREDENTIALS` (base64 JSON) when present, then falls back
+to `vars.DEB_S3_*` and the individual `AWS_*` / `DEB_REPO_SIGNING_*` secrets.
+Variables resolve from the caller repository and then its organization; one
+organization-level secret can serve all three repositories. See
+`admin/README.md`.
+
+## Credentials
+
+The preferred layout is one `DEB_CREDENTIALS` secret containing base64 JSON.
+GitHub has no file-upload or multi-field credential form; this is the single
+pasteable blob that gets closest to a credential file.
+
+```sh
+cp admin/credentials.json.example admin/credentials.json
+chmod 600 admin/credentials.json
+$EDITOR admin/credentials.json
+./admin/set-credentials.sh --dry-run
+./admin/set-credentials.sh
+```
+
+The JSON is a flat object keyed by environment variable name and covers
+`DEB_S3_*`, the AWS values, and the repository signing key/passphrase. The
+publish callers pass it as `DEB_CREDENTIALS`; the workflow decodes it, masks the
+actual secrets, and exports the values to the remaining steps. Individual
+organization/repository variables and secrets still work as fallbacks for keys
+missing from the JSON.
+
+`admin/credentials.json.example` is the template. The signing key can stay in a
+separate file referenced by `DEB_REPO_SIGNING_PRIVATE_KEY_FILE`; the helper
+embeds it and removes the `_FILE` key before uploading.
+
+The native per-field alternative is documented in `admin/README.md`.
+
+If the bucket is AWS S3 rather than Cloudflare R2, GitHub OIDC role assumption
+can replace the long-lived AWS keys later.
 
 ## How the CI checkout works
 

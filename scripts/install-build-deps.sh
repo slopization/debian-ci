@@ -18,6 +18,7 @@ packages=(
 	curl
 	debootstrap
 	devscripts
+	jq
 	mmdebstrap
 	sbuild
 )
