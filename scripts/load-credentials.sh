@@ -143,6 +143,15 @@ for name in "${credential_names[@]}"; do
 	fi
 done
 
+# Per-caller overrides are useful when one shared credential file is reused
+# across packages that publish to different buckets or prefixes.
+if [[ -n "${DEB_S3_BUCKET_OVERRIDE:-}" ]]; then
+	loaded[DEB_S3_BUCKET]=$DEB_S3_BUCKET_OVERRIDE
+fi
+if [[ -n "${DEB_S3_PREFIX_OVERRIDE:-}" ]]; then
+	loaded[DEB_S3_PREFIX]=$DEB_S3_PREFIX_OVERRIDE
+fi
+
 for name in "${credential_names[@]}"; do
 	value=${loaded[$name]:-}
 	if [[ -z "$value" ]]; then

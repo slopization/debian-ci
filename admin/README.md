@@ -85,6 +85,11 @@ present before trying to load it.
 The JSON form needs no organization variables at all. Keep the existing
 per-repository values only if you want a fallback during the transition.
 
+If all three packages share the same bucket and signing key but use different
+`DEB_S3_PREFIX` values, keep one JSON and set `s3-prefix` in each publish
+caller. `s3-bucket` is available for the same reason. These inputs override the
+JSON after it is loaded.
+
 ## Alternative: separate organization fields
 
 If you prefer GitHub's native per-field settings, `credentials.env.example` is

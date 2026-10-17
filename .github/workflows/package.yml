@@ -48,6 +48,16 @@ on:
         required: false
         type: string
         default: ""
+      s3-bucket:
+        description: "Optional per-repository override for DEB_S3_BUCKET"
+        required: false
+        type: string
+        default: ""
+      s3-prefix:
+        description: "Optional per-repository override for DEB_S3_PREFIX"
+        required: false
+        type: string
+        default: ""
     secrets:
       DEB_REPO_SIGNING_PRIVATE_KEY:
         required: false
@@ -94,6 +104,8 @@ jobs:
         id: credentials
         env:
           DEB_CREDENTIALS_B64: ${{ secrets.DEB_CREDENTIALS }}
+          DEB_S3_BUCKET_OVERRIDE: ${{ inputs.s3-bucket }}
+          DEB_S3_PREFIX_OVERRIDE: ${{ inputs.s3-prefix }}
           FALLBACK_DEB_S3_BUCKET: ${{ vars.DEB_S3_BUCKET }}
           FALLBACK_DEB_S3_PREFIX: ${{ vars.DEB_S3_PREFIX }}
           FALLBACK_DEB_S3_CODENAME: ${{ vars.DEB_S3_CODENAME }}

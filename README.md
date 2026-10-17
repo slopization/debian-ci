@@ -95,6 +95,8 @@ repository.
 | `suite` | `trixie` | sbuild/mmdebstrap suite |
 | `mirror` | `http://deb.debian.org/debian` | Debian mirror |
 | `artifact-name` | `<repo>-<sha>` | Uploaded artifact name |
+| `s3-bucket` | | Optional per-repository `DEB_S3_BUCKET` override |
+| `s3-prefix` | | Optional per-repository `DEB_S3_PREFIX` override |
 
 Publishing reads `DEB_CREDENTIALS` (base64 JSON) when present, then falls back
 to `vars.DEB_S3_*` and the individual `AWS_*` / `DEB_REPO_SIGNING_*` secrets.
@@ -122,6 +124,10 @@ publish callers pass it as `DEB_CREDENTIALS`; the workflow decodes it, masks the
 actual secrets, and exports the values to the remaining steps. Individual
 organization/repository variables and secrets still work as fallbacks for keys
 missing from the JSON.
+
+If the three packages share one JSON but publish to different buckets or
+prefixes, set `s3-bucket` or `s3-prefix` in the individual publish caller; those
+inputs override the JSON after it is loaded.
 
 `admin/credentials.json.example` is the template. The signing key can stay in a
 separate file referenced by `DEB_REPO_SIGNING_PRIVATE_KEY_FILE`; the helper
