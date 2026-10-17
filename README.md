@@ -15,7 +15,7 @@ signing, and publishing to `deb-s3` — lives here.
 
 ## Caller workflows
 
-Build on every push (and pull request), never publish:
+Build on every push to `main`, never publish:
 
 ```yaml
 name: build
