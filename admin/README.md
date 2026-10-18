@@ -75,6 +75,14 @@ Public key for clients: `debian-keys/repo-public.gpg` or `.asc`.
 
 ## Store the secret
 
+Verify the filled file first (GPG signing plus an authenticated S3 HEAD):
+
+```sh
+./admin/verify-credentials.sh admin/credentials.json
+```
+
+Then store it:
+
 ```sh
 jq -e . admin/credentials.json >/dev/null
 ./admin/set-credentials.sh --dry-run
