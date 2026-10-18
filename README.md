@@ -118,7 +118,9 @@ file. It covers only publishing:
   "AWS_ACCESS_KEY_ID": "...",
   "AWS_SECRET_ACCESS_KEY": "...",
   "DEB_REPO_SIGNING_PRIVATE_KEY": "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...",
-  "DEB_REPO_SIGNING_PASSPHRASE": "..."
+  "DEB_REPO_SIGNING_PASSPHRASE": "...",
+  "DEB_PACKAGE_SIGNING_PRIVATE_KEY": "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...",
+  "DEB_PACKAGE_SIGNING_PASSPHRASE": "..."
 }
 ```
 
@@ -126,11 +128,12 @@ The codename is intentionally absent: CI is expected to build branches named
 `debian/<codename>` and use `<codename>` as the APT suite. The branch workflow
 is not implemented yet.
 
-The package signing key is not in this secret. Keep it offline for `debsign` /
-`.dsc` / `.changes`; the repository key is the only key CI needs.
+The package signing key is included for future `.dsc`/`.changes` signing. CI
+currently uses only the repository key; keep an offline copy of the package key
+for local `debsign`.
 
-Generate the keys, put only the repository private key in
-`admin/credentials.json`, and store the secret:
+Generate the keys, put both inline keys in `admin/credentials.json`, and store
+the secret:
 
 ```sh
 ./admin/generate-debian-keys.sh \

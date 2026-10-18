@@ -11,8 +11,9 @@ stored here: CI will derive it from the branch name, where `debian/foo` builds
 and publishes codename `foo`. That branch logic is not wired yet; this file
 only defines the credential format.
 
-The package signing key stays offline. It is not part of `DEB_CREDENTIALS` and
-CI does not use it yet.
+The package signing key is included for future `.dsc`/`.changes` signing. CI
+currently uses only the repository key, but the package key is stored in the
+same secret so it is ready when that step is added.
 
 ## Minimal JSON
 
@@ -28,6 +29,8 @@ CI does not use it yet.
 | `AWS_SECRET_ACCESS_KEY` | yes | R2 or AWS secret |
 | `DEB_REPO_SIGNING_PRIVATE_KEY` | yes | ASCII-armored repository private key |
 | `DEB_REPO_SIGNING_PASSPHRASE` | no | Empty if the key has no passphrase |
+| `DEB_PACKAGE_SIGNING_PRIVATE_KEY` | no | ASCII-armored package private key |
+| `DEB_PACKAGE_SIGNING_PASSPHRASE` | no | Empty if the key has no passphrase |
 
 Deliberately omitted:
 
@@ -40,11 +43,10 @@ Deliberately omitted:
 - `DEB_S3_SIGN_KEY` — with one imported repository key, the fingerprint is
   selected automatically.
 - `AWS_SESSION_TOKEN` — not needed for long-lived R2/AWS keys.
-- `DEB_PACKAGE_SIGNING_*` — package key stays offline.
 
 ## Repository key
 
-Generate the repository key and keep the package key offline:
+Generate both keys:
 
 ```sh
 ./admin/generate-debian-keys.sh \
@@ -53,19 +55,21 @@ Generate the repository key and keep the package key offline:
   --out-dir ./debian-keys
 ```
 
-Put the contents of `debian-keys/repo-private.asc` into
-`DEB_REPO_SIGNING_PRIVATE_KEY` in `admin/credentials.json`. The JSON string must
-escape newlines as `\n`. Using `jq` is safer than editing by hand:
+Put the contents of `repo-private.asc` and `package-private.asc` into the
+two inline key fields. The JSON strings must escape newlines as `\n`. Using
+`jq` is safer than editing by hand:
 
 ```sh
 jq --rawfile repo debian-keys/repo-private.asc \
-  '.DEB_REPO_SIGNING_PRIVATE_KEY = $repo' \
+   --rawfile pkg debian-keys/package-private.asc \
+  '.DEB_REPO_SIGNING_PRIVATE_KEY = $repo
+   | .DEB_PACKAGE_SIGNING_PRIVATE_KEY = $pkg' \
   admin/credentials.json > admin/credentials.filled.json
 mv admin/credentials.filled.json admin/credentials.json
 ```
 
-Keep `debian-keys/package-private.asc` offline. The package key signs
-`.dsc`/`.changes` with `debsign`, not the APT repository metadata.
+The package key signs `.dsc`/`.changes` with `debsign`, not the APT repository
+metadata. CI does not use it yet; keep the offline copy for local signing.
 
 Public key for clients: `debian-keys/repo-public.gpg` or `.asc`.
 

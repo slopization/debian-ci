@@ -264,13 +264,11 @@ Next steps:
   DEBSIGN_KEYID=${package_fpr}
   debsign -k ${package_fpr} <changes-file>
 
-For the single DEB_CREDENTIALS JSON, point
-  DEB_REPO_SIGNING_PRIVATE_KEY_FILE
-at ${out_dir}/repo-private.asc and
-  DEB_PACKAGE_SIGNING_PRIVATE_KEY_FILE
-at ${out_dir}/package-private.asc; admin/set-credentials.sh embeds both.
-Set DEB_PACKAGE_SIGN_KEY to the package fingerprint if you later sign packages
-in CI.
+For the single DEB_CREDENTIALS JSON, paste the contents of
+${out_dir}/repo-private.asc into DEB_REPO_SIGNING_PRIVATE_KEY and
+${out_dir}/package-private.asc into DEB_PACKAGE_SIGNING_PRIVATE_KEY.
+Use jq --rawfile to avoid escaping newlines by hand.
+Set DEB_PACKAGE_SIGN_KEY to ${package_fpr} if you later sign packages in CI.
 
 Store both private keys, both revocation certificates, and the passphrases
 offline. Do not commit ${out_dir}/.
