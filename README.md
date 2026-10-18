@@ -110,6 +110,16 @@ The preferred layout is one `DEB_CREDENTIALS` secret containing base64 JSON.
 GitHub has no file-upload or multi-field credential form; this is the single
 pasteable blob that gets closest to a credential file.
 
+First generate the repository and package signing keys:
+
+```sh
+./admin/generate-debian-keys.sh \
+  --repo-uid 'NanoKVM APT Repository <repo@your-domain>' \
+  --package-uid 'Your Name <you@your-domain>'
+```
+
+Then fill in the JSON and store it:
+
 ```sh
 cp admin/credentials.json.example admin/credentials.json
 chmod 600 admin/credentials.json
@@ -119,7 +129,8 @@ $EDITOR admin/credentials.json
 ```
 
 The JSON is a flat object keyed by environment variable name and covers
-`DEB_S3_*`, the AWS values, and the repository signing key/passphrase. The
+`DEB_S3_*`, the AWS values, and the repository and package signing
+keys/passphrases. The
 publish callers pass it as `DEB_CREDENTIALS`; the workflow decodes it, masks the
 actual secrets, and exports the values to the remaining steps. Individual
 organization/repository variables and secrets still work as fallbacks for keys

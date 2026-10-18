@@ -110,6 +110,9 @@ credential_names=(
 	AWS_SESSION_TOKEN
 	DEB_REPO_SIGNING_PRIVATE_KEY
 	DEB_REPO_SIGNING_PASSPHRASE
+	DEB_PACKAGE_SIGNING_PRIVATE_KEY
+	DEB_PACKAGE_SIGNING_PASSPHRASE
+	DEB_PACKAGE_SIGN_KEY
 )
 
 declare -A allowed=()
@@ -117,32 +120,44 @@ for name in "${credential_names[@]}"; do
 	allowed["$name"]=1
 done
 allowed["DEB_REPO_SIGNING_PRIVATE_KEY_FILE"]=1
+allowed["DEB_PACKAGE_SIGNING_PRIVATE_KEY_FILE"]=1
 
 while IFS= read -r key; do
 	[[ -n "$key" ]] || continue
 	[[ -n "${allowed[$key]:-}" ]] || die "unknown credential name: $key"
 done < <(jq -r 'keys[]' "$json_file")
 
-key_file=$(jq -r '.["DEB_REPO_SIGNING_PRIVATE_KEY_FILE"] // empty' "$json_file")
-inline_key=$(jq -r '.["DEB_REPO_SIGNING_PRIVATE_KEY"] // empty' "$json_file")
-if [[ -n "$key_file" && -n "$inline_key" ]]; then
-	die "set only one of DEB_REPO_SIGNING_PRIVATE_KEY and DEB_REPO_SIGNING_PRIVATE_KEY_FILE"
-fi
-
 umask 077
 work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' EXIT
 normalized="${work_dir}/credentials.json"
+cp "$json_file" "$normalized"
 
-if [[ -n "$key_file" ]]; then
+embed_key_file() {
+	local inline_name="$1"
+	local file_name="$2"
+	local key_file=""
+	local inline_key=""
+	local temp_json=""
+
+	key_file=$(jq -r --arg name "$file_name" '.[$name] // empty' "$normalized")
+	inline_key=$(jq -r --arg name "$inline_name" '.[$name] // empty' "$normalized")
+	if [[ -n "$key_file" && -n "$inline_key" ]]; then
+		die "set only one of ${inline_name} and ${file_name}"
+	fi
+	[[ -n "$key_file" ]] || return 0
+
 	[[ "$key_file" == /* ]] || key_file="${json_dir}/${key_file}"
 	[[ -f "$key_file" ]] || die "signing key file not found: $key_file"
-	jq --rawfile key "$key_file" \
-		'del(."DEB_REPO_SIGNING_PRIVATE_KEY_FILE") | ."DEB_REPO_SIGNING_PRIVATE_KEY" = $key' \
-		"$json_file" >"$normalized"
-else
-	jq 'del(."DEB_REPO_SIGNING_PRIVATE_KEY_FILE")' "$json_file" >"$normalized"
-fi
+
+	temp_json=$(mktemp "${work_dir}/normalized.XXXXXX")
+	jq --rawfile key "$key_file" --arg inline "$inline_name" --arg filekey "$file_name" \
+		'del(.[$filekey]) | .[$inline] = $key' "$normalized" >"$temp_json"
+	mv "$temp_json" "$normalized"
+}
+
+embed_key_file DEB_REPO_SIGNING_PRIVATE_KEY DEB_REPO_SIGNING_PRIVATE_KEY_FILE
+embed_key_file DEB_PACKAGE_SIGNING_PRIVATE_KEY DEB_PACKAGE_SIGNING_PRIVATE_KEY_FILE
 
 missing=()
 for name in DEB_S3_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do

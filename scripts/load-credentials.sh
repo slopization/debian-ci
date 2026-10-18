@@ -29,6 +29,9 @@ credential_names=(
 	AWS_SESSION_TOKEN
 	DEB_REPO_SIGNING_PRIVATE_KEY
 	DEB_REPO_SIGNING_PASSPHRASE
+	DEB_PACKAGE_SIGNING_PRIVATE_KEY
+	DEB_PACKAGE_SIGNING_PASSPHRASE
+	DEB_PACKAGE_SIGN_KEY
 )
 
 secret_names=(
@@ -37,6 +40,8 @@ secret_names=(
 	AWS_SESSION_TOKEN
 	DEB_REPO_SIGNING_PRIVATE_KEY
 	DEB_REPO_SIGNING_PASSPHRASE
+	DEB_PACKAGE_SIGNING_PRIVATE_KEY
+	DEB_PACKAGE_SIGNING_PASSPHRASE
 )
 
 is_known_name() {
@@ -169,8 +174,15 @@ if [[ -n "${loaded[DEB_REPO_SIGNING_PRIVATE_KEY]:-}" ]]; then
 	has_signing_key=true
 fi
 
-if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-	printf 'has_signing_key=%s\n' "$has_signing_key" >>"$GITHUB_OUTPUT"
+has_package_signing_key=false
+if [[ -n "${loaded[DEB_PACKAGE_SIGNING_PRIVATE_KEY]:-}" ]]; then
+	has_package_signing_key=true
 fi
 
-printf 'loaded %d credential value(s); signing key: %s\n' "${#loaded[@]}" "$has_signing_key"
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+	printf 'has_signing_key=%s\n' "$has_signing_key" >>"$GITHUB_OUTPUT"
+	printf 'has_package_signing_key=%s\n' "$has_package_signing_key" >>"$GITHUB_OUTPUT"
+fi
+
+printf 'loaded %d credential value(s); repository key: %s; package key: %s\n' \
+	"${#loaded[@]}" "$has_signing_key" "$has_package_signing_key"

@@ -1,6 +1,46 @@
 # Credentials
 
-There are two supported layouts:
+## Generate the two keys first
+
+The repository key signs APT metadata; the package key signs `.dsc`/`.changes`
+files. They should be separate keys:
+
+```sh
+./admin/generate-debian-keys.sh \
+  --repo-uid 'NanoKVM APT Repository <repo@your-domain>' \
+  --package-uid 'Your Name <you@your-domain>' \
+  --out-dir ./debian-keys
+```
+
+The script prompts for one passphrase per key, creates two separate GnuPG
+homes, and writes:
+
+```text
+debian-keys/repo-private.asc      repository private key
+debian-keys/repo-public.asc/.gpg  repository public key
+debian-keys/repo-revoke.asc       repository revocation certificate
+debian-keys/package-private.asc   package private key
+debian-keys/package-public.asc    package public key
+debian-keys/package-revoke.asc    package revocation certificate
+debian-keys/key-info.txt          fingerprints and paths
+```
+
+Use the repository UID on the APT key and the package UID that matches the
+`Maintainer` field in `debian/changelog`. Store both private keys, both
+revocation certificates, and both passphrases offline. Never commit
+`debian-keys/`.
+
+Then point the JSON at the private key files:
+
+```json
+"DEB_REPO_SIGNING_PRIVATE_KEY_FILE": "../debian-keys/repo-private.asc",
+"DEB_PACKAGE_SIGNING_PRIVATE_KEY_FILE": "../debian-keys/package-private.asc"
+```
+
+`set-credentials.sh` embeds both keys and removes the `_FILE` entries before
+uploading the JSON.
+
+There are two supported credential layouts:
 
 1. **One `DEB_CREDENTIALS` secret** containing base64 JSON. This is the single
    file you asked for. The reusable workflow decodes it at publish time.
@@ -21,14 +61,11 @@ chmod 600 admin/credentials.json
 $EDITOR admin/credentials.json
 ```
 
-Keep the signing key in a separate file and point
-`DEB_REPO_SIGNING_PRIVATE_KEY_FILE` at it; the helper embeds it and removes the
-`_FILE` key before uploading the JSON:
-
-```sh
-gpg --armor --export-secret-keys "$key_id" > admin/repository-signing-private.asc
-chmod 600 admin/repository-signing-private.asc
-```
+Keep the signing keys in separate files and point
+`DEB_REPO_SIGNING_PRIVATE_KEY_FILE` and `DEB_PACKAGE_SIGNING_PRIVATE_KEY_FILE`
+at them; the helper embeds both and removes the
+`_FILE` key before uploading the JSON. The generator above already writes the
+two private key files; no manual export is needed.
 
 Preview, then store the secret:
 
@@ -73,7 +110,10 @@ The JSON is a flat object whose keys are the environment variable names:
   "AWS_SECRET_ACCESS_KEY": "...",
   "AWS_SESSION_TOKEN": "",
   "DEB_REPO_SIGNING_PRIVATE_KEY": "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...",
-  "DEB_REPO_SIGNING_PASSPHRASE": ""
+  "DEB_REPO_SIGNING_PASSPHRASE": "",
+  "DEB_PACKAGE_SIGNING_PRIVATE_KEY": "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...",
+  "DEB_PACKAGE_SIGNING_PASSPHRASE": "",
+  "DEB_PACKAGE_SIGN_KEY": ""
 }
 ```
 
@@ -119,6 +159,7 @@ Organization **secrets**:
 ```text
 AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 DEB_REPO_SIGNING_PRIVATE_KEY DEB_REPO_SIGNING_PASSPHRASE
+DEB_PACKAGE_SIGNING_PRIVATE_KEY DEB_PACKAGE_SIGNING_PASSPHRASE
 ```
 
 ## Remove old per-repository copies

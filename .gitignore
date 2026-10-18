@@ -2,3 +2,5 @@ admin/credentials.env
 admin/credentials.json
 admin/*.asc
 admin/*.gpg
+debian-keys/
+keys/
