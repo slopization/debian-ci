@@ -1,9 +1,50 @@
 # Credentials
 
-## Generate the two keys first
+The CI uses one organization secret:
 
-The repository key signs APT metadata; the package key signs `.dsc`/`.changes`
-files. They should be separate keys:
+```text
+DEB_CREDENTIALS = base64(the JSON file)
+```
+
+The JSON contains only what the publish step uses. The APT codename is **not**
+stored here: CI will derive it from the branch name, where `debian/foo` builds
+and publishes codename `foo`. That branch logic is not wired yet; this file
+only defines the credential format.
+
+The package signing key stays offline. It is not part of `DEB_CREDENTIALS` and
+CI does not use it yet.
+
+## Minimal JSON
+
+`admin/credentials.json` is the ready-to-edit scaffold (gitignored).
+
+| Key | Required | Notes |
+|---|---|---|
+| `DEB_S3_BUCKET` | yes | Repository bucket |
+| `DEB_S3_PREFIX` | no | Repo path inside the bucket; empty means bucket root |
+| `DEB_S3_REGION` | yes for R2 | `auto` for R2, real region for AWS |
+| `DEB_S3_ENDPOINT` | yes for R2 | `https://<account>.r2.cloudflarestorage.com`; empty for AWS |
+| `AWS_ACCESS_KEY_ID` | yes | R2 or AWS access key |
+| `AWS_SECRET_ACCESS_KEY` | yes | R2 or AWS secret |
+| `DEB_REPO_SIGNING_PRIVATE_KEY` | yes | ASCII-armored repository private key |
+| `DEB_REPO_SIGNING_PASSPHRASE` | no | Empty if the key has no passphrase |
+
+Deliberately omitted:
+
+- `DEB_S3_CODENAME` — derived from `debian/<codename>` branches.
+- `DEB_S3_COMPONENT` — defaults to `main`.
+- `DEB_S3_VISIBILITY`, `DEB_S3_LOCK`, `DEB_S3_USE_SESSION_TOKEN` — the publish
+  script uses R2-friendly defaults for a custom endpoint.
+- `DEB_S3_CLEAN`, `DEB_S3_PRESERVE_VERSIONS`, `DEB_S3_FAIL_IF_EXISTS` — defaults
+  are already the intended behavior.
+- `DEB_S3_SIGN_KEY` — with one imported repository key, the fingerprint is
+  selected automatically.
+- `AWS_SESSION_TOKEN` — not needed for long-lived R2/AWS keys.
+- `DEB_PACKAGE_SIGNING_*` — package key stays offline.
+
+## Repository key
+
+Generate the repository key and keep the package key offline:
 
 ```sh
 ./admin/generate-debian-keys.sh \
@@ -12,178 +53,55 @@ files. They should be separate keys:
   --out-dir ./debian-keys
 ```
 
-The script prompts for one passphrase per key, creates two separate GnuPG
-homes, and writes:
-
-```text
-debian-keys/repo-private.asc      repository private key
-debian-keys/repo-public.asc/.gpg  repository public key
-debian-keys/repo-revoke.asc       repository revocation certificate
-debian-keys/package-private.asc   package private key
-debian-keys/package-public.asc    package public key
-debian-keys/package-revoke.asc    package revocation certificate
-debian-keys/key-info.txt          fingerprints and paths
-```
-
-Use the repository UID on the APT key and the package UID that matches the
-`Maintainer` field in `debian/changelog`. Store both private keys, both
-revocation certificates, and both passphrases offline. Never commit
-`debian-keys/`.
-
-Then point the JSON at the private key files:
-
-```json
-"DEB_REPO_SIGNING_PRIVATE_KEY_FILE": "../debian-keys/repo-private.asc",
-"DEB_PACKAGE_SIGNING_PRIVATE_KEY_FILE": "../debian-keys/package-private.asc"
-```
-
-`set-credentials.sh` embeds both keys and removes the `_FILE` entries before
-uploading the JSON.
-
-There are two supported credential layouts:
-
-1. **One `DEB_CREDENTIALS` secret** containing base64 JSON. This is the single
-   file you asked for. The reusable workflow decodes it at publish time.
-2. **Separate organization variables/secrets.** This is the native GitHub
-   per-field layout; the loader script in this directory can populate it from a
-   local dotenv file.
-
-Both are optional fallbacks for each other. Values in `DEB_CREDENTIALS` win;
-separate variables/secrets fill in anything the JSON does not contain.
-
-## Single JSON secret
-
-`credentials.json.example` is the template:
+Put the contents of `debian-keys/repo-private.asc` into
+`DEB_REPO_SIGNING_PRIVATE_KEY` in `admin/credentials.json`. The JSON string must
+escape newlines as `\n`. Using `jq` is safer than editing by hand:
 
 ```sh
-cp admin/credentials.json.example admin/credentials.json
-chmod 600 admin/credentials.json
-$EDITOR admin/credentials.json
+jq --rawfile repo debian-keys/repo-private.asc \
+  '.DEB_REPO_SIGNING_PRIVATE_KEY = $repo' \
+  admin/credentials.json > admin/credentials.filled.json
+mv admin/credentials.filled.json admin/credentials.json
 ```
 
-Keep the signing keys in separate files and point
-`DEB_REPO_SIGNING_PRIVATE_KEY_FILE` and `DEB_PACKAGE_SIGNING_PRIVATE_KEY_FILE`
-at them; the helper embeds both and removes the
-`_FILE` key before uploading the JSON. The generator above already writes the
-two private key files; no manual export is needed.
+Keep `debian-keys/package-private.asc` offline. The package key signs
+`.dsc`/`.changes` with `debsign`, not the APT repository metadata.
 
-Preview, then store the secret:
+Public key for clients: `debian-keys/repo-public.gpg` or `.asc`.
+
+## Store the secret
 
 ```sh
+jq -e . admin/credentials.json >/dev/null
 ./admin/set-credentials.sh --dry-run
 ./admin/set-credentials.sh
 ```
 
-By default the secret is stored at organization level for `slopization` and
-granted to:
+The helper base64-encodes the whole JSON and stores it as `DEB_CREDENTIALS` at
+organization level (default `slopization`) with access for:
 
 ```text
 lt6911-of-debian,firmware-cnm-wave420l,u-boot-cv181x-debian
 ```
 
-Override with `--org`/`--repos`, or set one repository with
-`--repo slopization/lt6911-of-debian`. The script base64-encodes the JSON and
-sends it to `gh` through stdin; it never prints values.
-
-The JSON is a flat object whose keys are the environment variable names:
-
-```json
-{
-  "DEB_S3_BUCKET": "my-bucket",
-  "DEB_S3_PREFIX": "debian/nanokvm",
-  "DEB_S3_CODENAME": "trixie",
-  "DEB_S3_COMPONENT": "main",
-  "DEB_S3_REGION": "auto",
-  "DEB_S3_ENDPOINT": "https://<account_id>.r2.cloudflarestorage.com",
-  "DEB_S3_FORCE_PATH_STYLE": "0",
-  "DEB_S3_SIGN_KEY": "",
-  "DEB_S3_CLEAN": "1",
-  "DEB_S3_ORIGIN": "",
-  "DEB_S3_SUITE": "",
-  "DEB_S3_PRESERVE_VERSIONS": "0",
-  "DEB_S3_LOCK": "",
-  "DEB_S3_FAIL_IF_EXISTS": "0",
-  "DEB_S3_VISIBILITY": "",
-  "DEB_S3_USE_SESSION_TOKEN": "0",
-  "DEB_S3_GPG_PROVIDER": "",
-  "AWS_ACCESS_KEY_ID": "...",
-  "AWS_SECRET_ACCESS_KEY": "...",
-  "AWS_SESSION_TOKEN": "",
-  "DEB_REPO_SIGNING_PRIVATE_KEY": "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...",
-  "DEB_REPO_SIGNING_PASSPHRASE": "",
-  "DEB_PACKAGE_SIGNING_PRIVATE_KEY": "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...",
-  "DEB_PACKAGE_SIGNING_PASSPHRASE": "",
-  "DEB_PACKAGE_SIGN_KEY": ""
-}
-```
-
-The publish callers pass `DEB_CREDENTIALS: ${{ secrets.DEB_CREDENTIALS }}` to the
-shared workflow. The workflow writes the decoded values to the step
-environment, masks the actual secrets, and checks whether a signing key is
-present before trying to load it.
-
-The JSON form needs no organization variables at all. Keep the existing
-per-repository values only if you want a fallback during the transition.
-
-If all three packages share the same bucket and signing key but use different
-`DEB_S3_PREFIX` values, keep one JSON and set `s3-prefix` in each publish
-caller. `s3-bucket` is available for the same reason. These inputs override the
-JSON after it is loaded.
-
-## Alternative: separate organization fields
-
-If you prefer GitHub's native per-field settings, `credentials.env.example` is
-a dotenv template; `load-org-credentials.sh` reads it and stores each value as
-an organization variable or secret:
+To do it manually:
 
 ```sh
-cp admin/credentials.env.example admin/credentials.env
-chmod 600 admin/credentials.env
-$EDITOR admin/credentials.env
-./admin/load-org-credentials.sh --dry-run
-./admin/load-org-credentials.sh
+base64 < admin/credentials.json | tr -d '\n' > admin/credentials.b64
+gh secret set DEB_CREDENTIALS \
+  --org slopization \
+  --repos lt6911-of-debian,firmware-cnm-wave420l,u-boot-cv181x-debian \
+  < admin/credentials.b64
 ```
 
-Organization **variables**:
-
-```text
-DEB_S3_BUCKET DEB_S3_PREFIX DEB_S3_CODENAME DEB_S3_COMPONENT
-DEB_S3_REGION DEB_S3_ENDPOINT DEB_S3_FORCE_PATH_STYLE DEB_S3_SIGN_KEY
-DEB_S3_CLEAN DEB_S3_ORIGIN DEB_S3_SUITE DEB_S3_PRESERVE_VERSIONS
-DEB_S3_LOCK DEB_S3_FAIL_IF_EXISTS DEB_S3_VISIBILITY
-DEB_S3_USE_SESSION_TOKEN DEB_S3_GPG_PROVIDER
-```
-
-Organization **secrets**:
-
-```text
-AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-DEB_REPO_SIGNING_PRIVATE_KEY DEB_REPO_SIGNING_PASSPHRASE
-DEB_PACKAGE_SIGNING_PRIVATE_KEY DEB_PACKAGE_SIGNING_PASSPHRASE
-```
-
-## Remove old per-repository copies
-
-Repository-level variables and secrets take precedence over organization-level
-ones. If you move to organization-level values, delete the old per-repository
-copies or they will keep shadowing the shared configuration. The single
-`DEB_CREDENTIALS` secret does not have this problem because it is read
-explicitly by the workflow.
-
-```sh
-for repo in lt6911-of-debian firmware-cnm-wave420l u-boot-cv181x-debian; do
-  gh variable list --repo "slopization/$repo"
-  gh secret list --repo "slopization/$repo"
-done
-```
+Do not commit `admin/credentials.json` or `admin/credentials.b64`.
 
 ## Notes
 
-- GitHub has no file upload or multi-field credential form. This helper is the
-  bridge between one local file and GitHub's one-value-per-secret storage.
-- Empty values are skipped. Delete an organization variable or secret manually
-  if you need to remove one that was previously set.
-- Keep `admin/credentials.json`, `admin/credentials.env`, and the private key
-  file out of git; `.gitignore` covers them.
-- If your bucket is AWS S3 rather than Cloudflare R2, consider replacing the
-  long-lived AWS keys with GitHub OIDC role assumption later.
+- The `set-credentials.sh` helper also supports `*_PRIVATE_KEY_FILE` fields, but
+  the scaffold intentionally uses the inline key form.
+- If the three packages share one bucket and need different prefixes, leave
+  `DEB_S3_PREFIX` empty and set `s3-prefix` in each publish caller.
+- For AWS S3 instead of R2, leave `DEB_S3_ENDPOINT` empty and set the real
+  `DEB_S3_REGION`.
+- If you later use AWS S3, GitHub OIDC can replace the static AWS keys.

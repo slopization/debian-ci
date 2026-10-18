@@ -106,48 +106,43 @@ organization-level secret can serve all three repositories. See
 
 ## Credentials
 
-The preferred layout is one `DEB_CREDENTIALS` secret containing base64 JSON.
-GitHub has no file-upload or multi-field credential form; this is the single
-pasteable blob that gets closest to a credential file.
+One organization secret, `DEB_CREDENTIALS`, contains base64 of a minimal JSON
+file. It covers only publishing:
 
-First generate the repository and package signing keys:
+```json
+{
+  "DEB_S3_BUCKET": "my-bucket",
+  "DEB_S3_PREFIX": "debian/nanokvm",
+  "DEB_S3_REGION": "auto",
+  "DEB_S3_ENDPOINT": "https://<account_id>.r2.cloudflarestorage.com",
+  "AWS_ACCESS_KEY_ID": "...",
+  "AWS_SECRET_ACCESS_KEY": "...",
+  "DEB_REPO_SIGNING_PRIVATE_KEY": "-----BEGIN PGP PRIVATE KEY BLOCK-----\n...",
+  "DEB_REPO_SIGNING_PASSPHRASE": "..."
+}
+```
+
+The codename is intentionally absent: CI is expected to build branches named
+`debian/<codename>` and use `<codename>` as the APT suite. The branch workflow
+is not implemented yet.
+
+The package signing key is not in this secret. Keep it offline for `debsign` /
+`.dsc` / `.changes`; the repository key is the only key CI needs.
+
+Generate the keys, put only the repository private key in
+`admin/credentials.json`, and store the secret:
 
 ```sh
 ./admin/generate-debian-keys.sh \
   --repo-uid 'NanoKVM APT Repository <repo@your-domain>' \
   --package-uid 'Your Name <you@your-domain>'
-```
 
-Then fill in the JSON and store it:
-
-```sh
-cp admin/credentials.json.example admin/credentials.json
-chmod 600 admin/credentials.json
-$EDITOR admin/credentials.json
 ./admin/set-credentials.sh --dry-run
 ./admin/set-credentials.sh
 ```
 
-The JSON is a flat object keyed by environment variable name and covers
-`DEB_S3_*`, the AWS values, and the repository and package signing
-keys/passphrases. The
-publish callers pass it as `DEB_CREDENTIALS`; the workflow decodes it, masks the
-actual secrets, and exports the values to the remaining steps. Individual
-organization/repository variables and secrets still work as fallbacks for keys
-missing from the JSON.
-
-If the three packages share one JSON but publish to different buckets or
-prefixes, set `s3-bucket` or `s3-prefix` in the individual publish caller; those
-inputs override the JSON after it is loaded.
-
-`admin/credentials.json.example` is the template. The signing key can stay in a
-separate file referenced by `DEB_REPO_SIGNING_PRIVATE_KEY_FILE`; the helper
-embeds it and removes the `_FILE` key before uploading.
-
-The native per-field alternative is documented in `admin/README.md`.
-
-If the bucket is AWS S3 rather than Cloudflare R2, GitHub OIDC role assumption
-can replace the long-lived AWS keys later.
+See `admin/README.md` for the field list and the manual `base64 | gh secret set`
+form.
 
 ## How the CI checkout works
 
