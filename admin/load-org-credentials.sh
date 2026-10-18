@@ -5,7 +5,7 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 
 org="slopization"
 file="${script_dir}/credentials.env"
-repos="lt6911-of-debian,firmware-cnm-wave420l,u-boot-cv181x-debian"
+repos=""
 dry_run=false
 allow_incomplete=false
 
@@ -19,8 +19,8 @@ variables and secrets in GitHub. Nothing is printed except names and status.
 Options:
   --org ORG              Organization name (default: slopization)
   --file FILE            Credentials file (default: admin/credentials.env)
-  --repos REPO1,REPO2    Repositories allowed to read the secrets
-                         (default: the three Debian package repositories)
+  --repos REPO1,REPO2    Restrict which repositories can read the secrets
+                         (default: all repositories in the org)
   --dry-run              Print what would be set, without changing GitHub
   --allow-incomplete     Do not fail when required credentials are missing
   -h, --help             Show this help
@@ -66,7 +66,6 @@ done
 
 [[ -f "$file" ]] || die "credentials file not found: $file"
 [[ -n "$org" ]] || die "--org is required"
-[[ -n "$repos" ]] || die "--repos is required"
 
 file_dir=$(CDPATH='' cd -- "$(dirname -- "$file")" && pwd)
 file="${file_dir}/$(basename -- "$file")"
@@ -187,8 +186,10 @@ for name in "${variable_names[@]}"; do
 	fi
 	if [[ "$dry_run" == true ]]; then
 		printf 'would set variable %s\n' "$name"
-	else
+	elif [[ -n "$repos" ]]; then
 		gh variable set "$name" --org "$org" --repos "$repos" --body "$value"
+	else
+		gh variable set "$name" --org "$org" --body "$value"
 	fi
 done
 
@@ -200,7 +201,9 @@ for name in "${secret_names[@]}"; do
 	fi
 	if [[ "$dry_run" == true ]]; then
 		printf 'would set secret %s\n' "$name"
-	else
+	elif [[ -n "$repos" ]]; then
 		printf '%s' "$value" | gh secret set "$name" --org "$org" --repos "$repos"
+	else
+		printf '%s' "$value" | gh secret set "$name" --org "$org"
 	fi
 done

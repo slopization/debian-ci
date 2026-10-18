@@ -5,7 +5,7 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 
 json_file="${script_dir}/credentials.json"
 org="slopization"
-repos="lt6911-of-debian,firmware-cnm-wave420l,u-boot-cv181x-debian"
+repos=""
 repo=""
 dry_run=false
 allow_incomplete=false
@@ -20,7 +20,7 @@ DEB_CREDENTIALS secret. The workflow decodes it at publish time.
 Options:
   --json FILE            Credentials JSON (default: admin/credentials.json)
   --org ORG              Organization target (default: slopization)
-  --repos REPO1,REPO2    Repositories allowed to read the organization secret
+  --repos REPO1,REPO2    Restrict which repositories can read the org secret
   --repo OWNER/REPO      Store a repository-level secret instead of an org one
   --dry-run              Validate and print key names only
   --allow-incomplete     Do not fail when required values are missing
@@ -179,8 +179,10 @@ if [[ "$dry_run" == true ]]; then
 	printf 'dry run: would store DEB_CREDENTIALS for '
 	if [[ -n "$repo" ]]; then
 		printf 'repository %s\n' "$repo"
-	else
+	elif [[ -n "$repos" ]]; then
 		printf 'organization %s (repos: %s)\n' "$org" "$repos"
+	else
+		printf 'organization %s (all repositories)\n' "$org"
 	fi
 	printf 'keys: '
 	jq -r 'keys | join(", ")' "$normalized"
@@ -196,5 +198,9 @@ base64 <"$normalized" | tr -d '\n' >"$encoded"
 if [[ -n "$repo" ]]; then
 	gh secret set DEB_CREDENTIALS --repo "$repo" <"$encoded"
 else
-	gh secret set DEB_CREDENTIALS --org "$org" --repos "$repos" <"$encoded"
+	if [[ -n "$repos" ]]; then
+		gh secret set DEB_CREDENTIALS --org "$org" --repos "$repos" <"$encoded"
+	else
+		gh secret set DEB_CREDENTIALS --org "$org" <"$encoded"
+	fi
 fi

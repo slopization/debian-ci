@@ -101,7 +101,7 @@ repository.
 Publishing reads `DEB_CREDENTIALS` (base64 JSON) when present, then falls back
 to `vars.DEB_S3_*` and the individual `AWS_*` / `DEB_REPO_SIGNING_*` secrets.
 Variables resolve from the caller repository and then its organization; one
-organization-level secret can serve all three repositories. See
+organization-level secret can serve every repository in the org. See
 `admin/README.md`.
 
 ## Credentials
@@ -165,8 +165,7 @@ workflow checks out its own SHA, a caller that pins a commit or immutable tag
 runs exactly the scripts from that commit.
 
 The shared repository must be public (or readable by the caller repositories'
-`GITHUB_TOKEN`) for the self-checkout to work. All three current package
-repositories are public.
+`GITHUB_TOKEN`) for the self-checkout to work.
 
 ## Local checks
 

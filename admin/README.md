@@ -90,20 +90,14 @@ jq -e . admin/credentials.json >/dev/null
 ```
 
 The helper base64-encodes the whole JSON and stores it as `DEB_CREDENTIALS` at
-organization level (default `slopization`) with access for:
-
-```text
-lt6911-of-debian,firmware-cnm-wave420l,u-boot-cv181x-debian
-```
+organization level (default `slopization`). By default it is available to every
+repository in the org; pass `--repos` to restrict it to specific ones.
 
 To do it manually:
 
 ```sh
 base64 < admin/credentials.json | tr -d '\n' > admin/credentials.b64
-gh secret set DEB_CREDENTIALS \
-  --org slopization \
-  --repos lt6911-of-debian,firmware-cnm-wave420l,u-boot-cv181x-debian \
-  < admin/credentials.b64
+gh secret set DEB_CREDENTIALS --org slopization < admin/credentials.b64
 ```
 
 Do not commit `admin/credentials.json` or `admin/credentials.b64`.
@@ -112,7 +106,7 @@ Do not commit `admin/credentials.json` or `admin/credentials.b64`.
 
 - The `set-credentials.sh` helper also supports `*_PRIVATE_KEY_FILE` fields, but
   the scaffold intentionally uses the inline key form.
-- If the three packages share one bucket and need different prefixes, leave
+- If packages share one bucket and need different prefixes, leave
   `DEB_S3_PREFIX` empty and set `s3-prefix` in each publish caller.
 - For AWS S3 instead of R2, leave `DEB_S3_ENDPOINT` empty and set the real
   `DEB_S3_REGION`.
