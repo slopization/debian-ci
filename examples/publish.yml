@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   publish:
-    uses: slopization/debian-ci/.github/workflows/publish.yml@v2
+    uses: slopization/debian-ci/.github/workflows/publish.yml@v2.0.1
     with:
       build-run-id: ${{ inputs.build-run-id }}
       artifact-name: ${{ inputs.artifact-name }}

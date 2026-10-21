@@ -42,7 +42,9 @@ CI exports source, overlays the pinned recipe, creates an orig/quilt source
 package, builds binaries in sbuild/unshare/mmdebstrap, and uploads artifacts.
 Cross-builds keep a native build chroot and use `--build <native> --host <target>
 --arch-all`, including architecture-independent outputs in the same build.
-Only the temporary changelog changes:
+Ubuntu 24.04 uses the official Noble backport of sbuild (>=0.88.3), avoiding
+host/chroot APT solver ABI mismatches. Log timestamps are normalized for GitHub
+artifact filename restrictions. Only the temporary changelog changes:
 
 - Tag `v1.2.3` → `1.2.3-1`.
 - Snapshots → `<recipe-upstream>+gitYYYYMMDD.<12-source-hash>-1`, source UTC date.
@@ -72,14 +74,16 @@ are not the current API.
 shellcheck -x scripts/*.sh tests/*.sh
 bash tests/prepare-source-tree.sh
 bash tests/run-sbuild.sh
+bash tests/install-build-deps.sh
 node --test github-app/worker.test.mjs
 actionlint -ignore 'property "workflow_repository" is not defined' \
   -ignore 'property "workflow_sha" is not defined' .github/workflows/*.yml examples/*.yml
 ```
 
 See [App setup](github-app/README.md) and the workspace [handoff](../../HANDOFF.md).
-Shared CI has not been pushed; planned breaking release `v2` does not exist yet. Do not
-move `v1`. GitHub.com's [workflow identity contexts](https://github.blog/changelog/2026-09-03-github-actions-early-september-2026-updates/)
+Shared CI is published. Use the fixed `v2.0.1` release or an immutable CI commit;
+initial `v2` is retained for audit but has the old cross-resolver/artifact-log bugs.
+Neither `v1` nor existing release refs are moved. GitHub.com's [workflow identity contexts](https://github.blog/changelog/2026-09-03-github-actions-early-september-2026-updates/)
 keep the workflow and helper checkout at the same revision; GHES is not supported
 by that mechanism. The existing legacy firmware build was App-dispatched and
 passed without a push; new generic recipe builds still need publication and

@@ -37,6 +37,9 @@ jobs:
       - name: Test native and cross sbuild commands and artifacts
         run: bash tests/run-sbuild.sh
 
+      - name: Test supported builder selection
+        run: bash tests/install-build-deps.sh
+
   webhook-tests:
     runs-on: ubuntu-latest
     steps:

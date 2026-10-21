@@ -32,12 +32,15 @@ mkdir -p "$build_dir" "$artifact_dir" "$(dirname -- "$chroot")"
 # Always retain source files and logs, including failed sbuild runs. dpkg's
 # filenames already omit epochs; never use the changelog version as a filename.
 collect_artifacts() {
-	local file
+	local file name
 	shopt -s nullglob globstar
 	for file in "$source_dir"/*.dsc "$source_dir"/*.tar.* \
 		"$build_dir"/**/*.deb "$build_dir"/**/*.udeb \
 		"$build_dir"/**/*.changes "$build_dir"/**/*.buildinfo "$build_dir"/**/*.build; do
-		[[ ! -f "$file" ]] || cp -L --preserve=mode,timestamps "$file" "$artifact_dir/"
+		[[ -f "$file" ]] || continue
+		name=${file##*/}
+		# sbuild timestamped logs contain colons, rejected by upload-artifact.
+		cp -L --preserve=mode,timestamps "$file" "$artifact_dir/${name//:/-}"
 	done
 }
 trap collect_artifacts EXIT

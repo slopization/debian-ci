@@ -28,7 +28,8 @@ case "${0##*/}" in
     done
     mkdir -p "$out/nested"
     touch "$out/nested/kernel_riscv64.deb" "$out/nested/linux-source_all.deb" \
-      "$out/nested/kernel.udeb" "$out/kernel.changes" "$out/kernel.buildinfo" "$out/kernel.build"
+      "$out/nested/kernel.udeb" "$out/kernel.changes" "$out/kernel.buildinfo" "$out/kernel.build" \
+      "$out/kernel_2026-10-21T01:02:03Z.build"
     exit "${FAKE_STATUS:-0}"
     ;;
 esac
@@ -54,7 +55,7 @@ grep -q -- '--build amd64 --host riscv64 --arch-all' "$root/commands" || fail 'c
 ! grep -q -- '--arch riscv64' "$root/commands" || fail 'cross build incorrectly uses foreign chroot'
 grep -q -- 'trixie-amd64.tar' "$root/bootstrap" || fail 'native chroot missing'
 ! grep -q -- 'trixie-riscv64.tar' "$root/bootstrap" || fail 'foreign chroot created'
-for file in kernel_riscv64.deb linux-source_all.deb kernel.udeb kernel.changes kernel.buildinfo kernel.build kernel.dsc kernel.orig.tar.xz kernel.debian.tar.xz; do
+for file in kernel_riscv64.deb linux-source_all.deb kernel.udeb kernel.changes kernel.buildinfo kernel.build kernel_2026-10-21T01-02-03Z.build kernel.dsc kernel.orig.tar.xz kernel.debian.tar.xz; do
   [[ -f "$root/cross/artifacts/$file" ]] || fail "missing artifact: $file"
 done
 if FAKE_STATUS=23 run failed --host-arch riscv64; then

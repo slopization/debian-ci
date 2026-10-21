@@ -1,7 +1,7 @@
 # Install in the RECIPE repository on its default main branch.
 # Replace the source allowlist and literal packaging SHA before use.
 # Never self-pin the caller commit; pin an existing packaging commit.
-# v2 is planned; release shared CI before remote use.
+# Use the fixed v2.0.1 release (or an audited immutable CI commit).
 name: build
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ permissions:
 jobs:
   build:
     if: inputs.source-repository == 'slopization/example-source'
-    uses: slopization/debian-ci/.github/workflows/package.yml@v2
+    uses: slopization/debian-ci/.github/workflows/package.yml@v2.0.1
     with:
       source-repository: ${{ inputs.source-repository }}
       source-sha: ${{ inputs.source-sha }}

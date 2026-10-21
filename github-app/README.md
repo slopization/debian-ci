@@ -40,11 +40,13 @@ selection, then authenticated repository-access API calls added sources and
 removed .github. No all-repo grant was used.
 
 The kernel fork and dependency-grouped source topics were published as requested.
-Original three package repos, kernel recipe changes, and shared CI remain unpushed;
-shared CI v2 and new recipe main branches are not published. Worker deployment
+Shared CI and kernel recipe main were published with explicit authorization;
+original three package repos remain unchanged. Worker deployment
 c855745f-dbb6-4fd3-ac3a-c53fe99ac801 includes kernel branch filtering, verified live.
 Add the original three future recipe repos before activating their builds. Kernel
-source/recipe access is already granted, but kernel CI also awaits code publication.
+source/recipe access is already granted and live Worker/App dispatch is verified;
+full kernel cross-build verification is in progress. Use shared CI v2.0.1 or a
+fixed immutable commit, not the initial v2 with known cross-resolver/log bugs.
 
 For an already registered App, the [configuration helper](configure-app.mjs)
 authenticates the key, generates/reuses a private webhook secret, verifies hook
@@ -116,8 +118,11 @@ The [47 tests](worker.test.mjs) mock GitHub requests and cover signatures, routi
 JWTs, tag peeling, deduplication, and failures. App authentication, scoped source
 access, real GitHub ping delivery, and an [existing firmware workflow run](https://github.com/slopization/firmware-cnm-wave420l/actions/runs/39551646321)
 were verified live without pushing. That run passed sbuild/firmware validation
-and uploaded an artifact as dpkg-ci[bot]. The new recipe-based dispatch path is
-still unpublished and untested end-to-end; APT publication was not triggered.
+and uploaded an artifact as dpkg-ci[bot]. The live kernel Worker/App path also
+dispatched a real recipe build from an owner-signed synthetic cv181x push, without
+another source commit. Source/quilt assembly passed; initial binary setup exposed
+an old host resolver ABI mismatch and colon-containing logs, fixed in v2.0.1.
+Full kernel runtime verification is ongoing; APT publication was not triggered.
 
 References: [Cloudflare native config](https://developers.cloudflare.com/cf/projects/cloudflare-config/),
 [GitHub App manifests](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest),
