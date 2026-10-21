@@ -80,12 +80,14 @@ actionlint -ignore 'property "workflow_repository" is not defined' \
   -ignore 'property "workflow_sha" is not defined' .github/workflows/*.yml examples/*.yml
 ```
 
-See [App setup](github-app/README.md) and the workspace [handoff](../../HANDOFF.md).
+See [App setup](github-app/README.md) and the [kernel recipe](https://github.com/slopization/linux-cv181x-sodoport-debian).
 Shared CI is published. Use the fixed `v2.0.1` release or an immutable CI commit;
 initial `v2` is retained for audit but has the old cross-resolver/artifact-log bugs.
 Neither `v1` nor existing release refs are moved. GitHub.com's [workflow identity contexts](https://github.blog/changelog/2026-09-03-github-actions-early-september-2026-updates/)
 keep the workflow and helper checkout at the same revision; GHES is not supported
-by that mechanism. The existing legacy firmware build was App-dispatched and
-passed without a push; new generic recipe builds still need publication and
-runtime validation. The [kernel migration](../../KERNEL-MIGRATION.md) is based on
-a published v7.1 source fork; only its aggregate cv181x branch is watched.
+by that mechanism. The [kernel cross-build](https://github.com/slopization/linux-cv181x-sodoport-debian/actions/runs/39569419468)
+passed through the live Worker/App using v2.0.1 and a pinned recipe. Package
+architectures, source/recipe provenance, checksums, RISC-V header tools and their
+runtime dependencies were verified. Only aggregate source `cv181x` is watched;
+topic branches and kernel tags do not build automatically. No APT publication
+was triggered. Hardware boot testing remains separate.
