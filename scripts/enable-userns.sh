@@ -28,3 +28,7 @@ fi
 if [[ -e /proc/sys/kernel/unprivileged_userns_clone ]]; then
 	sudo sysctl -w kernel.unprivileged_userns_clone=1 >/dev/null
 fi
+# Ubuntu 24.04+ otherwise restricts unshare even with valid subuid/subgid maps.
+if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+	sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 >/dev/null
+fi

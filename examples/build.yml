@@ -1,0 +1,37 @@
+# Install in the RECIPE repository on its default main branch.
+# Replace the source allowlist and literal packaging SHA before use.
+# Never self-pin the caller commit; pin an existing packaging commit.
+# v2 is planned; release shared CI before remote use.
+name: build
+on:
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository (owner/name)
+        required: true
+        type: string
+      source-sha:
+        description: Full lowercase 40-character source commit SHA
+        required: true
+        type: string
+      source-tag:
+        description: Raw source tag verified by the bridge (empty for snapshots)
+        required: false
+        default: ""
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    if: inputs.source-repository == 'slopization/example-source'
+    uses: slopization/debian-ci/.github/workflows/package.yml@v2
+    with:
+      source-repository: ${{ inputs.source-repository }}
+      source-sha: ${{ inputs.source-sha }}
+      source-tag: ${{ inputs.source-tag }}
+      recipe-repository: ${{ github.repository }}
+      # Immutable packaging commit, deliberately preceding caller-only changes.
+      recipe-sha: 0123456789abcdef0123456789abcdef01234567
+      suite: trixie
+      # Optional; omit for native driver, firmware, or U-Boot packaging.
+      # host-arch: riscv64

@@ -1,0 +1,98 @@
+name: Publish Debian packages
+on:
+  workflow_call:
+    inputs:
+      build-run-id:
+        description: "Successful build run in the caller repository"
+        required: true
+        type: string
+      artifact-name:
+        description: "Exact artifact name from that run"
+        required: true
+        type: string
+      suite:
+        type: string
+        default: trixie
+    secrets:
+      DEB_CREDENTIALS:
+        required: true
+permissions:
+  actions: read
+  contents: read
+concurrency:
+  group: debian-publish-${{ github.repository }}-${{ inputs.suite }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ARTIFACT_DIR: ${{ github.workspace }}/publish-artifacts
+      BUILD_RUN_ID: ${{ inputs.build-run-id }}
+      PUBLISH_SUITE: ${{ inputs.suite }}
+    steps:
+      - name: Require manual caller and successful same-repository build
+        env:
+          CALLER_EVENT: ${{ github.event_name }}
+          CALLER_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        run: |
+          [[ "$CALLER_EVENT" == workflow_dispatch ]] || { echo '::error::Manual workflow_dispatch required'; exit 1; }
+          [[ -n "$CALLER_ACTOR" && "$CALLER_ACTOR" != *'[bot]' ]] || { echo '::error::Publishing requires a human actor, not a GitHub App'; exit 1; }
+          [[ "$BUILD_RUN_ID" =~ ^[1-9][0-9]*$ && -n "$ARTIFACT_NAME" ]]
+          [[ "$PUBLISH_SUITE" =~ ^[a-z0-9][a-z0-9.-]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" > "$RUNNER_TEMP/build-run.json"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg run "$BUILD_RUN_ID" '
+            (.id | tostring) == $run and .repository.full_name == $repo and
+            .head_repository.full_name == $repo and .status == "completed" and
+            .conclusion == "success" and .event == "workflow_dispatch"
+          ' "$RUNNER_TEMP/build-run.json" >/dev/null
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ env.ARTIFACT_DIR }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build-run-id }}
+          repository: ${{ github.repository }}
+      - name: Verify exact artifact provenance
+        run: |
+          jq -e --arg repo "$GITHUB_REPOSITORY" \
+            --arg run "$BUILD_RUN_ID" --arg suite "$PUBLISH_SUITE" \
+            '.build_repository == $repo and .recipe_repository == $repo and
+              .run_id == $run and .suite == $suite and
+              (.source_repository | type == "string" and test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")) and
+              (.source_sha | type == "string" and test("^[0-9a-f]{40}$")) and
+              (.recipe_sha | type == "string" and test("^[0-9a-f]{40}$")) and
+              (.source_tag | type == "string")' \
+            "$ARTIFACT_DIR/build-provenance.json" >/dev/null
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+      - name: Install publishing tools
+        run: |
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y ruby ruby-dev build-essential gnupg
+          sudo gem install --no-document deb-s3
+      - name: Load organization credentials
+        id: credentials
+        env:
+          DEB_CREDENTIALS_B64: ${{ secrets.DEB_CREDENTIALS }}
+        run: .ci/scripts/load-credentials.sh
+      - name: Validate publishing configuration
+        env:
+          COMPONENT: ${{ vars.DEB_S3_COMPONENT }}
+        run: |
+          [[ -n "${DEB_S3_BUCKET:-}" && -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]
+          [[ "$COMPONENT" =~ ^[a-z0-9][a-z0-9+.-]*$ ]] || { echo '::error::Set repository variable DEB_S3_COMPONENT'; exit 1; }
+      - name: Load repository signing key
+        if: steps.credentials.outputs.has_signing_key == 'true'
+        run: .ci/scripts/setup-repo-signing.sh --env-file "$GITHUB_ENV" --home "$RUNNER_TEMP/deb-repo-signing"
+      - name: Publish existing binaries (no rebuild)
+        env:
+          DEB_S3_CODENAME: ${{ inputs.suite }}
+          DEB_S3_COMPONENT: ${{ vars.DEB_S3_COMPONENT }}
+        run: .ci/scripts/publish-deb-s3.sh --artifact-dir "$ARTIFACT_DIR"

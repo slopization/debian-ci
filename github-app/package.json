@@ -1,0 +1,15 @@
+{
+  "name": "debian-ci-github-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test worker.test.mjs",
+    "build": "cf build",
+    "deploy": "cf deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.3",
+    "cf": "1.0.0-beta.18",
+    "vite": "8.3.4"
+  }
+}
