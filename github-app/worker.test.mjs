@@ -161,31 +161,36 @@ test('ignored events/repos/deletions/branches/invalid tags never dispatch', asyn
   });
 });
 
-test('kernel aggregate cv181x dispatches the kernel recipe only', async () => {
+test('kernel all-branches route dispatches any branch push', async (t) => {
   const source = 'slopization/linux-cv181x-sodoport';
-  const { env } = fixture({ [source]: { branch: 'cv181x', ref: 'main', tags: false } });
-  await withFetch([
-    { path: tokenPath, method: 'POST', status: 201, body: { token: 'kernel-token' }, check(init) {
-      assert.deepEqual(JSON.parse(init.body).repositories, ['linux-cv181x-sodoport', 'linux-cv181x-sodoport-debian']);
-    } },
-    { path: `/repos/${source}/git/commits/${SHA}`, body: { sha: SHA } },
-    { path: `/repos/${source}-debian/actions/workflows/build.yml/dispatches`, method: 'POST', status: 204, check(init) {
-      assert.deepEqual(JSON.parse(init.body), { ref: 'main', inputs: {
-        'source-repository': source, 'source-sha': SHA, 'source-tag': '',
-      } });
-    } },
-  ], async () => {
-    const response = await handleWebhook(request(push({ repository: { full_name: source }, ref: 'refs/heads/cv181x' })), env);
-    assert.equal(response.status, 202);
-    assert.deepEqual(await response.json(), { dispatched: true });
-  });
+  const route = { branch: '*', ref: 'main', tags: false };
+  for (const ref of ['refs/heads/cv181x', 'refs/heads/master', 'refs/heads/patch/01-sg2002-duo256m', 'refs/heads/wave4']) {
+    await t.test(ref, async () => {
+      const { env } = fixture({ [source]: route });
+      await withFetch([
+        { path: tokenPath, method: 'POST', status: 201, body: { token: 'kernel-token' }, check(init) {
+          assert.deepEqual(JSON.parse(init.body).repositories, ['linux-cv181x-sodoport', 'linux-cv181x-sodoport-debian']);
+        } },
+        { path: `/repos/${source}/git/commits/${SHA}`, body: { sha: SHA } },
+        { path: `/repos/${source}-debian/actions/workflows/build.yml/dispatches`, method: 'POST', status: 204, check(init) {
+          assert.deepEqual(JSON.parse(init.body), { ref: 'main', inputs: {
+            'source-repository': source, 'source-sha': SHA, 'source-tag': '',
+          } });
+        } },
+      ], async () => {
+        const response = await handleWebhook(request(push({ repository: { full_name: source }, ref })), env);
+        assert.equal(response.status, 202);
+        assert.deepEqual(await response.json(), { dispatched: true });
+      });
+    });
+  }
 });
 
-test('kernel per-patch branches, upstream master and tags never dispatch', async (t) => {
+test('kernel all-branches route still ignores tags', async (t) => {
   const source = 'slopization/linux-cv181x-sodoport';
-  const { env, states } = fixture({ [source]: { branch: 'cv181x', ref: 'main', tags: false } });
+  const { env, states } = fixture({ [source]: { branch: '*', ref: 'main', tags: false } });
   await withFetch([], async () => {
-    for (const ref of ['refs/heads/patch/01-sg2002-duo256m', 'refs/heads/master', 'refs/tags/v7.1']) {
+    for (const ref of ['refs/tags/v7.1', 'refs/tags/v1.2.3']) {
       await t.test(ref, async () => {
         const response = await handleWebhook(request(push({ repository: { full_name: source }, ref })), env);
         assert.equal(response.status, 202);

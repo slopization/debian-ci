@@ -73,7 +73,10 @@ export async function handleWebhook(request, env) {
   const ref = payload.ref;
   const tag = typeof ref === "string" && ref.startsWith("refs/tags/") ? ref.slice(10) : "";
   const versionTag = route.tags !== false && /^v[0-9][A-Za-z0-9.+~\-]*$/.test(tag);
-  if (ref !== `refs/heads/${route.branch}` && !versionTag) return json({ ignored: "ref" }, 202);
+  const branchMatch = route.branch === "*"
+    ? typeof ref === "string" && ref.startsWith("refs/heads/")
+    : ref === `refs/heads/${route.branch}`;
+  if (!branchMatch && !versionTag) return json({ ignored: "ref" }, 202);
   const stub = env.DELIVERIES.get(env.DELIVERIES.idFromName(delivery.toLowerCase()));
   return stub.fetch("https://delivery/", {
     method: "POST", body: JSON.stringify({ source, after: payload.after, tag, installation: payload.installation.id }),

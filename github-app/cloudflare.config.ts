@@ -13,7 +13,7 @@ export default defineConfig({
         "slopization/lt6911-of": { branch: "master", ref: "main" },
         "slopization/firmware-cnm-wave420l": { branch: "master", ref: "main" },
         "slopization/u-boot-cv181x": { branch: "master", ref: "main" },
-        "slopization/linux-cv181x-sodoport": { branch: "cv181x", ref: "main", tags: false },
+        "slopization/linux-cv181x-sodoport": { branch: "*", ref: "main", tags: false },
       })),
       GITHUB_APP_ID: bindings.secret(),
       GITHUB_APP_PRIVATE_KEY: bindings.secret(),
